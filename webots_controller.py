@@ -58,6 +58,12 @@ gsNames = ['gs0', 'gs1', 'gs2']
 for i in range(3):
     gs.append(robot.getDevice(gsNames[i]))
     gs[i].enable(timestep)
+    
+encoder = []
+encoderNames = ['left wheel sensor', 'right wheel sensor']
+for i in range(2):
+    encoder.append(robot.getDevice(encoderNames[i]))
+    encoder[i].enable(timestep)
 
 # motors    
 leftMotor = robot.getDevice('left wheel motor')
@@ -74,19 +80,30 @@ rightMotor.setVelocity(0.0)
 
 while robot.step(timestep) != -1:
 
-    ############################################
-    #                  See                     #
-    ############################################
-
     # Update sensor readings
     gsValues = []
     for i in range(3):
         gsValues.append(gs[i].getValue())
+        
+    psValues = []    
+    for i in range(8):
+        psValues.append(ps[i].getValue())
+        
+    encoderValues = []
+    for i in range(2):
+        encoderValues.append(encoder[i].getValue())    # [rad]
+
 
     # Process sensor data
     line_right = gsValues[0] > 600
     line_center = gsValues[1] > 600
     line_left = gsValues[2] > 600
+    
+    obstacle_front = psValues[0] > 80 or psValues[7] > 80
+    obstacle_right = psValues[2] > 80 or psValues[1] > 80 
+    obstacle_left  = psValues[5] > 80 or psValues[6] > 80 
+    obstacle_back  = psValues[4] > 80 or psValues[3] > 80
+    
     
     # Build the message to be sent to the ESP32 with the ground
     # sensor data: 0 = line detected; 1 = line not detected
@@ -103,18 +120,32 @@ while robot.step(timestep) != -1:
         message += '1'
     else:
         message += '0'
+    if obstacle_front:
+        message += '1'
+    else:
+        message += '0'
+    if obstacle_right:
+        message += '1'
+    else:
+        message += '0'
+    if obstacle_left:
+        message += '1'
+    else:
+        message += '0'
+    if obstacle_back:
+        message += '1'
+    else:
+        message += '0'
     msg_bytes = bytes(message + '\n', 'UTF-8')
     
 
-    ############################################
-    #                 Think                    #
-    ############################################
+
 
     # Serial communication: if something is received, then update the current state
     if ser.in_waiting:
         value = str(ser.readline(), 'UTF-8')[:-1]  # ignore the last character
         current_state = value
-
+    #controlling the robot speed
     # Update speed according to the current state
     if current_state == 'forward':
         leftSpeed = speed

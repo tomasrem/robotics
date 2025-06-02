@@ -50,6 +50,11 @@ line_left = False
 line_center = False
 line_right = False
 
+obstacle_front = False
+obstacle_right = False
+obstacle_left  = False
+obstacle_back  = False 
+
 # Variables to implement the line-following state machine
 current_state = 'forward'
 counter = 0
@@ -68,27 +73,55 @@ while True:
         # Ignore old messages (Webots can send faster than the ESP32 can process)
         # Then split them in the same order used in Webots and update sensor status
 
+#line detection 
         # line_left
-        if msg_str[-4:-3] == '1':
+        if msg_str[0] == '1':
             line_left = True
-            led_blue.on()
+            
         else:
             line_left = False
-            led_blue.off()
+            
         # line_center
-        if msg_str[-3:-2] == '1':
+        if msg_str[1] == '1':
             line_center = True
-            led_green.on()
+            
         else:
             line_center = False
-            led_green.off()
+            
         # line_right
-        if msg_str[-2:-1] == '1':
+        if msg_str[2] == '1':
             line_right = True
-            led_red.on()
+            
         else:
             line_right = False
-            led_red.off()
+            
+#obstancles detection    
+         #obstancle front 
+        if msg_str[3] == '1':
+            obstacle_front = True
+            
+        else:
+            obstacle_front = False
+            
+         #obstancle right 
+        if msg_str[4] == '1':
+            obstacle_right = True
+            
+        else:
+            obstacle_right = False
+         #obstancle left 
+        if msg_str[5] == '1':
+            obstacle_left = True
+            
+        else:
+            obstacle_left = False
+            
+         #obstancle back 
+        if msg_str[6] == '1':
+            obstacle_back = True
+            
+        else:
+            obstacle_back = False
 
 
     ##################   Think   ###################
@@ -131,7 +164,7 @@ while True:
             current_state = 'forward'
             state_update = True
             led_board.value(0)
-            
+    ### to be made obstancle avoidance 'logic'      
     
     ##################   Act   ###################
 
