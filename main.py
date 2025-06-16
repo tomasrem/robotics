@@ -1,254 +1,261 @@
-import socket
-import math
-from machine import Pin
+from machine import Pin, UART
 from time import sleep
+import itertools
+from heapq import heappush, heappop
 
-# --- LED and Button Setup ---
-led_board = Pin(2, Pin.OUT)
+#--------------------------------------------------------------------------------------------------------
+
+# DIJKSTRA ALGORITHM PART
+
+class Graph:
+    def _init_(self, adjacency_list):
+        self.adjacency_list = adjacency_list
+
+
+class Vertex:
+    def _init_(self, value):
+        self.value = value
+
+
+class Edge:
+    def _init_(self, distance, vertex):
+        self.distance = distance
+        self.vertex = vertex
+
+
+def dijkstra(graph, start, end):
+    previous = {v: None for v in graph.adjacency_list.keys()}
+    visited = {v: False for v in graph.adjacency_list.keys()}
+    distances = {v: float("inf") for v in graph.adjacency_list.keys()}
+    distances[start] = 0
+    queue = PriorityQueue()
+    queue.add_task(0, start)
+    path = []
+    while queue:
+        removed_distance, removed = queue.pop_task()
+        visited[removed] = True
+
+        if removed is end:
+            while previous[removed]:
+                path.append(removed.value)
+                removed = previous[removed]
+            path.append(start.value)
+            print(f"shortest distance to {end.value}: ", distances[end])
+            print(f"path to {end.value}: ", path[::-1])
+            return path[::-1], distances[end]
+
+        for edge in graph.adjacency_list[removed]:
+            if visited[edge.vertex]:
+                continue
+            new_distance = removed_distance + edge.distance
+            if new_distance < distances[edge.vertex]:
+                distances[edge.vertex] = new_distance
+                previous[edge.vertex] = removed
+                queue.add_task(new_distance, edge.vertex)
+    return
+
+
+# slightly modified heapq implementation from https://docs.python.org/3/library/heapq.html
+class PriorityQueue:
+    def _init_(self):
+        self.pq = []  # list of entries arranged in a heap
+        self.entry_finder = {}  # mapping of tasks to entries
+        self.counter = itertools.count()  # unique sequence count
+
+    def _len_(self):
+        return len(self.pq)
+
+    def add_task(self, priority, task):
+        'Add a new task or update the priority of an existing task'
+        if task in self.entry_finder:
+            self.update_priority(priority, task)
+            return self
+        count = next(self.counter)
+        entry = [priority, count, task]
+        self.entry_finder[task] = entry
+        heappush(self.pq, entry)
+
+    def update_priority(self, priority, task):
+        'Update the priority of a task in place'
+        entry = self.entry_finder[task]
+        count = next(self.counter)
+        entry[0], entry[1] = priority, count
+
+    def pop_task(self):
+        'Remove and return the lowest priority task. Raise KeyError if empty.'
+        while self.pq:
+            priority, count, task = heappop(self.pq)
+            del self.entry_finder[task]
+            return priority, task
+        raise KeyError('pop from an empty priority queue')
+
+
+# testing the algorithm
+vertices = [Vertex("A"), Vertex("B"), Vertex("C"), Vertex("D"), Vertex("E"), Vertex("F"), Vertex("G"), Vertex("H"), Vertex("I"), Vertex("J"), Vertex("K"), Vertex("L"), Vertex("M"), Vertex("N"), Vertex("Ñ"), Vertex("O"), Vertex("P"), Vertex("Q"), Vertex("R")]
+A, B, C, D, E, F, G, H, I, J, K, L, M, N, Ñ, O, P, Q, R = vertices
+
+adj_list = {
+    A: [Edge(0.1, B), Edge(0.25, G)],
+    B: [Edge(0.1, A), Edge(0.1, C)],
+    C: [Edge(0.1, B), Edge(0.1, D)],
+    D: [Edge(0.1, C), Edge(0.2, E)],
+    E: [Edge(0.2, D), Edge(0.5, F), Edge(0.16671, H)],
+    F: [Edge(0.5, E), Edge(0.1667, I)],
+    G: [Edge(0.25, A), Edge(0.501, J), Edge(0.5, L)],
+    H: [Edge(0.16671, E), Edge(0.501, I), Edge(0.0833, J)],
+    I: [Edge(0.1667, F), Edge(0.501, H),  Edge(0.0833, K)],
+    J: [Edge(0.501, G), Edge(0.0833, H), Edge(0.501, K), Edge(0.0833, M)],
+    K: [Edge(0.501, J), Edge(0.0833, I), Edge(0.25, R)],
+    L: [Edge(0.0833, G), Edge(0.501, M), Edge(0.1667, N)],
+    M: [Edge(0.0833, J), Edge(0.501, L), Edge(0.16671, Ñ)],
+    N: [Edge(0.5, Ñ), Edge(0.1667, L)],
+    Ñ: [Edge(0.5, N), Edge(0.16671, M), Edge(0.2, O)],
+    O: [Edge(0.2, Ñ), Edge(0.1, P)],
+    P: [Edge(0.1, O), Edge(0.1, Q)],
+    Q: [Edge(0.1, P), Edge(0.1, R)],
+    R: [Edge(0.1, Q), Edge(0.25, K)],
+}
+
+my_graph = Graph(adj_list)
+
+#dijkstra(my_graph, start=A, end=N)
+
+A_coordinate = [0, 0]
+B_coordinate = [0, 0.1]
+C_coordinate = [0, 0.2]
+D_coordinate = [0, 0.3]
+E_coordinate = [0, 0.5]
+F_coordinate = [0, 1]
+G_coordinate = [2.25, 0]
+H_coordinate = [0.166, 0.5]
+I_coordinate = [0.166, 1]
+J_coordinate = [0.25, 1]
+K_coordinate = [0.25, 1]
+L_coordinate = [0.33, 0]
+M_coordinate = [0.33, 0.5]
+N_coordinate = [0.5, 0]
+Ñ_coordinate = [0.5, 0]
+O_coordinate = [0.5, 0.7]
+P_coordinate = [0.5, 0.8]
+Q_coordinate = [0.5, 0.9]
+R_coordinate = [0.5, 1]
+
+
+#--------------------------------------------------------------------------------------------------------
+# UART COMMUNICATION PART
+
+led_board = Pin(2, Pin.OUT)    
 led_yellow = Pin(4, Pin.OUT)
 led_blue = Pin(23, Pin.OUT)
 led_green = Pin(22, Pin.OUT)
 led_red = Pin(21, Pin.OUT)
-button_left = Pin(34, Pin.IN, Pin.PULL_DOWN)
+
+button_left = Pin(16, Pin.IN, Pin.PULL_DOWN)
 button_right = Pin(35, Pin.IN, Pin.PULL_DOWN)
 
-# --- Grid and Cost Definitions ---
-grid = [
-    [0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
-    [0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0],
-    [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0]
-]
+robot_path_msg, _ = dijkstra(my_graph, start=A, end=P)
+print (robot_path_msg)
+nodes_to_travel = len(robot_path_msg)
 
-costs = [
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 10, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-    ]
+robot_path_string = "".join(robot_path_msg)
 
-# --- Dijkstra Algorithm ---
-def dijkstra(grid, costs, start, goal):
-    rows, cols = len(grid), len(grid[0])
-    visited = set()
-    distances = {start: 0}
-    parents = {start: None}
-    queue = [(0, start)]
-    directions = [(-1,0), (1,0), (0,-1), (0,1)]
 
-    while queue:
-        queue.sort()
-        dist, node = queue.pop(0)
-        if node in visited: continue
-        visited.add(node)
-        if node == goal: break
+path_in_coordinates = []
 
-        for dx, dy in directions:
-            neighbor = (node[0]+dy, node[1]+dx)
-            if 0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols and grid[neighbor[0]][neighbor[1]] == 0:
-                new_dist = dist + costs[neighbor[0]][neighbor[1]]
-                if neighbor not in distances or new_dist < distances[neighbor]:
-                    distances[neighbor] = new_dist
-                    parents[neighbor] = node
-                    queue.append((new_dist, neighbor))
+for i in range(nodes_to_travel):
+    if robot_path_msg[i] == "A":
+        path_in_coordinates.append(A_coordinate)
+    elif robot_path_msg[i] == "B":
+        path_in_coordinates.append(B_coordinate)
+    elif robot_path_msg[i] == "C":
+        path_in_coordinates.append(C_coordinate)
+    elif robot_path_msg[i] == "D":
+        path_in_coordinates.append(D_coordinate)
+    elif robot_path_msg[i] == "E":
+        path_in_coordinates.append(E_coordinate)
+    elif robot_path_msg[i] == "F":
+        path_in_coordinates.append(F_coordinate)
+    elif robot_path_msg[i] == "G":
+        path_in_coordinates.append(G_coordinate)
+    elif robot_path_msg[i] == "H":
+        path_in_coordinates.append(H_coordinate)
+    elif robot_path_msg[i] == "I":
+        path_in_coordinates.append(I_coordinate)
+    elif robot_path_msg[i] == "J":
+        path_in_coordinates.append(J_coordinate)
+    elif robot_path_msg[i] == "K":
+        path_in_coordinates.append(K_coordinate)
+    elif robot_path_msg[i] == "L":
+        path_in_coordinates.append(L_coordinate)
+    elif robot_path_msg[i] == "M":
+        path_in_coordinates.append(M_coordinate)
+    elif robot_path_msg[i] == "N":
+        path_in_coordinates.append(N_coordinate)
+    elif robot_path_msg[i] == "Ñ":
+        path_in_coordinates.append(Ñ_coordinate)
+    elif robot_path_msg[i] == "O":
+        path_in_coordinates.append(O_coordinate)
+    elif robot_path_msg[i] == "P":
+        path_in_coordinates.append(P_coordinate)
+    elif robot_path_msg[i] == "Q":
+        path_in_coordinates.append(Q_coordinate)
+    elif robot_path_msg[i] == "R":
+        path_in_coordinates.append(R_coordinate)
 
-    path = []
-    node = goal
-    while node is not None:
-        path.append(node)
-        node = parents.get(node)
-    return path[::-1]
+print(path_in_coordinates) 
 
-# --- World to Grid Conversion ---
-def world_to_grid(x, y):
-    cell_size = 0.0625  # meters
-    origin_grid = (10, 16)  # robot at (x=0, y=0) → grid(10,16)
-    row = origin_grid[0] - abs(int(round(y / cell_size)))
-    col = origin_grid[1] - abs(int(round(x / cell_size)))
-    return (row, col)
 
-# --- Wait for Start ---
-print("Click the button on the ESP32 to start the TCP server.")
-while not button_left():
+print("Click the button on the ESP32 to continue. Then, close Thonny and run the Webots simulation.")
+
+while button_left() == False:
     sleep(0.25)
     led_board.value(not led_board())
-led_board.off()
 
-addr = socket.getaddrinfo('0.0.0.0', 1234)[0][-1]
-server = socket.socket()
-server.bind(addr)
-server.listen(1)
-print('Listening on', addr)
+uart = UART(1, 115200, tx=1, rx=3)
 
-client, _ = server.accept()
-print('Client connected!')
+# Variables to implement the line-following state machine
+current_state = 'IDLE'
+state_updated = True
 
-# --- Plan Path ---
-start_node = (10, 16)
-goal_node = (2, 0)
-path = dijkstra(grid, costs, start_node, goal_node)
-print("Planned path:", path)
-current_path_index = 0
+leido = False
 
-
-current_state = 'forward'
-counter = 0
-COUNTER_MAX = 3
-COUNTER_STOP = 50
-COUNTER_MAX_2 = 10
-sharp_turn = False
-# --- Main Loop ---
-buffer = ""
 while True:
-    state_updated = False  # reset flag every loop
-
-    try:
-        if client:
-            data = client.recv(64).decode()
-            buffer += data
-
-            while '\n' in buffer:
-                line, buffer = buffer.split('\n', 1)
-                parts = line.strip().split(',')
-
-                if len(parts) >= 4:
-                    sensor_bits = parts[0].strip()
-                    try:
-                        x = int(parts[1].strip()) / 1000
-                        y = int(parts[2].strip()) / 1000
-                        phi = int(parts[3].strip()) / 1000
-                    except ValueError:
-                        print("Invalid coordinates:", parts)
-                        continue
-                    line_left = sensor_bits[0] == '1'
-                    line_center = sensor_bits[1] == '1'
-                    line_right = sensor_bits[2] == '1'
-
-                    print(f"Sensor L/C/R: {sensor_bits} | x: {x} | y: {y} | phi: {phi}")               
-                    gx, gy = world_to_grid(x, y) # returns grid from coordinates 
-                    target = path[current_path_index] # passes the current path index to dijkstra algorithm
-                    print(f"x: {x:.3f}, y: {y:.3f} → Grid: ({gx}, {gy}) | Target: {target}")
-                    print(f"cpath:{current_path_index}")
-
-                    if (gx, gy) == target:
-                        print("✓ Reached", target)
-                        current_path_index += 1
-                        if current_path_index >= len(path):
-                            print("✓ Goal reached.")
-                            current_state = 'stop'
-                            state_updated = True
-                            continue
-                            target = path[current_path_index]
-
-                    # Determine direction
-                    dx = target[1] - gy
-                    dy = target[0] - gx
-
-                    if dx == -1:
-                        current_state  = 'turn_left'
-                        state_updated = True
-                        sharp_turn = False 
-                    elif dx == 1:
-                        current_state  = 'turn_right'
-                        state_updated = True
-                        sharp_turn = False 
-                    else:
-                        current_state  = 'forward'
-                        state_updated = True
+    if uart.any():
+        msg = uart.readline()
+        if msg:
+            msg_str = msg.decode('utf-8').strip()    
+                
+            if msg_str == "IDLE":
+                led_blue.off()
+                led_green.off()
+                led_red.off()
+                led_yellow.on()
+                if leido == False:
+                    for i in range(10):
+                        uart.write(robot_path_string +'\n')
+                
                         
-            # --- STATE MACHINE ---
+            if msg_str == "forward":
+                led_blue.on()
+                led_green.off()
+                led_red.off()
+                led_yellow.off() 
+                
+            elif msg_str == "left":
+                led_blue.off()
+                led_green.on()
+                led_red.off()
+                led_yellow.off()
+                
+            elif msg_str == "right":
+                lef_blue.off()
+                led_green.off()
+                led_red.on()
+                led_yellow.off()
 
-            if current_state == 'forward':
-                if sharp_turn == False :
-                    if line_right and not line_left:
-                        current_state = 'turn_right'
-                        state_updated = True
-                        counter = 0
-                    elif line_left and not line_right:
-                        current_state = 'turn_left'
-                        state_updated = True
-                        counter = 0
-                        
-                    elif line_left and line_center and line_right:
-                        current_state = 'turn_left'
-                        state_updated = True
-                        counter = 0
-                        
-                else:
-                    if counter >= COUNTER_MAX_2:
-                        sharp_turn = False
-                        counter = 0
+    if state_updated == True:
+        uart.write(robot_path_string + '\n')
+        estado = current_state
+        state_updated = False
 
-            elif current_state == 'turn_right':
-                counter += 1
-                if sharp_turn == False:
-                    if counter >= COUNTER_MAX:
-                        current_state = 'forward'
-                        state_updated = True
-                        counter = 0
-                        
-                        
-                else:
-                    if counter >= COUNTER_MAX_2:
-                        current_state = 'forward'
-                        state_updated = True
-                        sharp_turn = False 
-                        counter = 0    
-
-            elif current_state == 'turn_left':
-                counter += 1
-                if sharp_turn == False :
-                    if counter >= COUNTER_MAX:
-                        current_state = 'forward'
-                        state_updated = True
-                        counter = 0
-                else:
-                    if counter >= COUNTER_MAX_2:
-                        current_state = 'forward'
-                        state_updated = True
-                        sharp_turn = False 
-                        counter = 0    
-
-            elif current_state == 'stop':
-                led_board.on()
-                counter += 1
-                if counter >= COUNTER_STOP:
-                    current_state = 'forward'
-                    state_updated = True
-                    counter = 0
-                    led_board.off()
-
-            if state_updated:
-                client.send((current_state + '\n').encode())
-                print(f"New state sent: {current_state} , {sharp_turn}")
-                    
-            sleep(0.05)
-
-    except OSError:
-        print("Connection lost. Waiting for reconnection.")
-        client.close()
-        client, _ = server.accept()
-        print('Client reconnected.')
-        current_path_index = 0
-
-
-
-
+    sleep(0.02)
