@@ -12,16 +12,61 @@ sock.connect((HOST, PORT))
 sock.settimeout(0.01)  # non-blocking receive
 
 #-------------------------------------------------------
+
+
+SHARP_TURN_DURATION =  5 # number of control loop steps
+sharp_turn_counter = 0
+sharp_turn_active = False
+active_sharp_turn = None
+sharp_turn_cooldown = 0
+SHARP_TURN_COOLDOWN = 15
+
+
 MAX_SPEED = 6.28
-speed = 0.2 * MAX_SPEED
+speed =  0.4* MAX_SPEED
 R = 0.0205        # Wheel radius [m]
 D = 0.052         # Distance between wheels [m]
+
+# Initial robot pose
+x = 0   # [m]
+y = 0    # [m]
+phi = 1.5  # [rad]
+
+
+
+# PID constants
+Kp = 1.2
+Ki = 0.0
+Kd = 0.25
+
+# PID state variables
+integral = 0.0
+last_error = 0.0
+error_history = []
+
+# PID compute function
+def compute_pid(error, dt):
+    global integral, last_error, error_history
+
+    error_history.append(error)
+    if len(error_history) > 5:
+        error_history.pop(0)
+
+    smoothed_error = sum(error_history) / len(error_history)
+    integral += smoothed_error * dt
+    derivative = (smoothed_error - last_error) / dt if dt > 0 else 0.0
+
+    last_error = smoothed_error
+    return Kp * smoothed_error + Ki * integral + Kd * derivative
+
+
+
 
 
 robot = Robot()
 timestep = int(robot.getBasicTimeStep())
 delta_t = timestep / 1000.0  # [s]
-states = ['forward', 'turn_right', 'turn_left', 'stop']
+states = ['forward', 'turn_right', 'turn_left', 'stop', 'Sharpleft','Sharpright']
 current_state = 'forward'
 
 # Initialize devices
@@ -49,10 +94,7 @@ rightMotor.setVelocity(0.0)
 
 oldEncoderValues = []
 
-# Initial robot pose
-x = 0   # [m]
-y = 0    # [m]
-phi = 1.5  # [rad]
+
 
 def get_wheels_speed(encoderValues, oldEncoderValues, delta_t):
     wl = (encoderValues[0] - oldEncoderValues[0]) / delta_t
@@ -111,21 +153,102 @@ while robot.step(timestep) != -1:
         data = sock.recv(32).decode().strip()
         if data in states:
             current_state = data
+        print(data)   
     except socket.timeout:
         pass
+            
+    if current_state not in ['Sharpright', 'Sharpleft']: 
+    
+        # Calculate weighted error: left = -1, center = 0, right = +1
+        weights = [-1, 0, 1]
+        weighted_sum = 0
+        total = 0
+    
+    
+    
+        binary = []
+        if current_state == 'forward':
+            binary = [0,1,0]
+        elif current_state == 'turn_right':
+            binary = [1,1,0]
+        elif current_state == 'turn_left':
+            binary = [0,1,1]
+        elif current_state == 'stop':
+            pass
+    
+    
+    
+    
+    
+    
+    
+        # received data and do the pid controll of the motor speeds
+        for i in range(3):
+            weighted_sum += weights[i] * binary[i]
+            total += binary[i]
+    
+        # Determine error or recovery
+        if total > 0:
+            error = weighted_sum / total
+            line_lost = False
+        else:
+            error = -1.5 if last_error < 0 else 1.5  # gently turn back
+            line_lost = True
+    
+        # Compute PID correction
+        correction = compute_pid(error, delta_t)
+    
+        # Adjust speed
+        base_speed = 0.2 * MAX_SPEED if line_lost else 0.35 * MAX_SPEED
+        left_speed = base_speed - correction
+        right_speed = base_speed + correction
+    
+        # Clamp speeds
+        left_speed = max(min(left_speed, MAX_SPEED), -MAX_SPEED)
+        right_speed = max(min(right_speed, MAX_SPEED), -MAX_SPEED)
+        
+    # Sharp turn handling
+    if sharp_turn_active:
+        sharp_turn_counter += 1
+    
+        # Perform active sharp turn
+        if active_sharp_turn == 'Sharpleft':
+            left_speed = -0.2 * MAX_SPEED
+            right_speed = 0.4 * MAX_SPEED
+        elif active_sharp_turn == 'Sharpright':
+            left_speed = 0.4 * MAX_SPEED
+            right_speed = -0.2 * MAX_SPEED
+    
+        if sharp_turn_counter >= SHARP_TURN_DURATION:
+            sharp_turn_active = False
+            sharp_turn_counter = 0
+            active_sharp_turn = None
+    
+    elif current_state in ['Sharpleft', 'Sharpright'] and not sharp_turn_active:
+        # Start a new sharp turn
+        sharp_turn_active = True
+        active_sharp_turn = current_state
+        sharp_turn_counter = 0
+    
+        if active_sharp_turn == 'Sharpleft':
+            left_speed = -0.2 * MAX_SPEED
+            right_speed = 0.4 * MAX_SPEED
+        elif active_sharp_turn == 'Sharpright':
+            left_speed = 0.4 * MAX_SPEED
+            right_speed = -0.2 * MAX_SPEED
+     
+    
 
-    if current_state == 'forward':
-        leftSpeed = rightSpeed = speed
-    elif current_state == 'turn_right':
-        leftSpeed, rightSpeed = 0.5 * speed, -0.5 * speed
-    elif current_state == 'turn_left':
-        leftSpeed, rightSpeed = -0.5 * speed, 0.5 * speed
-    elif current_state == 'stop':
-        leftSpeed = rightSpeed = 0.0
+    # Apply to motors
+    leftMotor.setVelocity(left_speed)
+    rightMotor.setVelocity(right_speed)
 
-    # --- ACT ---
-    leftMotor.setVelocity(leftSpeed)
-    rightMotor.setVelocity(rightSpeed)
+
+
+
+
+
+   
     print(f'Sensor message: {message.strip()} - Current state: {current_state}')
     print(f"Encoders: L={encoderValues[0]:.3f}, R={encoderValues[1]:.3f}")
 sock.close()

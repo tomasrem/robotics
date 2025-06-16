@@ -12,6 +12,7 @@ led_red = Pin(21, Pin.OUT)
 button_left = Pin(34, Pin.IN, Pin.PULL_DOWN)
 button_right = Pin(35, Pin.IN, Pin.PULL_DOWN)
 
+
 # --- Grid and Cost Definitions ---
 grid = [
     [0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -34,7 +35,7 @@ costs = [
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 10],
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -79,10 +80,11 @@ def dijkstra(grid, costs, start, goal):
 
 # --- World to Grid Conversion ---
 def world_to_grid(x, y):
-    cell_size = 0.0625  # meters
+    cell_sizex = 0.058823529
+    cell_sizey = 0.061538461# meters
     origin_grid = (10, 16)  # robot at (x=0, y=0) → grid(10,16)
-    row = origin_grid[0] - abs(int(round(y / cell_size)))
-    col = origin_grid[1] - abs(int(round(x / cell_size)))
+    row = origin_grid[0] - abs(int(round(y / cell_sizey)))
+    col = origin_grid[1] - abs(int(round(x / cell_sizex)))
     return (row, col)
 
 # --- Wait for Start ---
@@ -118,6 +120,7 @@ sharp_turn = False
 # --- Main Loop ---
 buffer = ""
 while True:
+    mapturn = False
     state_updated = False  # reset flag every loop
 
     try:
@@ -161,71 +164,67 @@ while True:
                     # Determine direction
                     dx = target[1] - gy
                     dy = target[0] - gx
-
+                    
+                    
                     if dx == -1:
-                        current_state  = 'turn_left'
+                        if  line_right == 1:
+                            current_state  = 'Sharpleft'
+                        
+                        else:
+                            current_state  = 'forward'
                         state_updated = True
-                        sharp_turn = False 
+                        print('from map turn left')
+                            
+                 
+                            
                     elif dx == 1:
-                        current_state  = 'turn_right'
+                        if line_left == 1 :
+                            current_state  = 'Sharpright'
+                            
+                        else :
+                            current_state  = 'forward'
                         state_updated = True
-                        sharp_turn = False 
-                    else:
-                        current_state  = 'forward'
-                        state_updated = True
+                        print('from map turn right')
+
                         
             # --- STATE MACHINE ---
 
             if current_state == 'forward':
-                if sharp_turn == False :
-                    if line_right and not line_left:
-                        current_state = 'turn_right'
-                        state_updated = True
-                        counter = 0
-                    elif line_left and not line_right:
-                        current_state = 'turn_left'
-                        state_updated = True
-                        counter = 0
+                if line_right and not line_left:
+                    current_state = 'turn_right'
+                    state_updated = True
+                    counter = 0
+                elif line_left and not line_right:
+                    current_state = 'turn_left'
+                    state_updated = True
+                    counter = 0
+                    
+                elif line_left and line_center and line_right:
+                    current_state = 'turn_left'
+                    state_updated = True
+                    counter = 0
                         
-                    elif line_left and line_center and line_right:
-                        current_state = 'turn_left'
-                        state_updated = True
-                        counter = 0
-                        
-                else:
-                    if counter >= COUNTER_MAX_2:
-                        sharp_turn = False
-                        counter = 0
+                
 
             elif current_state == 'turn_right':
                 counter += 1
-                if sharp_turn == False:
-                    if counter >= COUNTER_MAX:
-                        current_state = 'forward'
-                        state_updated = True
-                        counter = 0
+              
+                if counter >= COUNTER_MAX:
+                    current_state = 'forward'
+                    state_updated = True
+                    counter = 0
                         
                         
-                else:
-                    if counter >= COUNTER_MAX_2:
-                        current_state = 'forward'
-                        state_updated = True
-                        sharp_turn = False 
-                        counter = 0    
+  
 
             elif current_state == 'turn_left':
                 counter += 1
-                if sharp_turn == False :
-                    if counter >= COUNTER_MAX:
-                        current_state = 'forward'
-                        state_updated = True
-                        counter = 0
-                else:
-                    if counter >= COUNTER_MAX_2:
-                        current_state = 'forward'
-                        state_updated = True
-                        sharp_turn = False 
-                        counter = 0    
+                
+                if counter >= COUNTER_MAX:
+                    current_state = 'forward'
+                    state_updated = True
+                    counter = 0
+  
 
             elif current_state == 'stop':
                 led_board.on()
@@ -248,6 +247,7 @@ while True:
         client, _ = server.accept()
         print('Client reconnected.')
         current_path_index = 0
+
 
 
 
