@@ -35,7 +35,7 @@ phi = 1.5  # [rad]
 
 
 # PID constants
-Kp = 1.2
+Kp = 1.3
 Ki = 0.0
 Kd = 0.25
 

@@ -35,7 +35,7 @@ costs = [
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 10],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -110,16 +110,18 @@ path = dijkstra(grid, costs, start_node, goal_node)
 print("Planned path:", path)
 current_path_index = 0
 
-
+passed_intersection = False
 current_state = 'forward'
 counter = 0
 COUNTER_MAX = 3
 COUNTER_STOP = 50
 COUNTER_MAX_2 = 10
 sharp_turn = False
+loop_count = 0 
 # --- Main Loop ---
 buffer = ""
 while True:
+    loop_count += 1
     mapturn = False
     state_updated = False  # reset flag every loop
 
@@ -164,10 +166,11 @@ while True:
                     # Determine direction
                     dx = target[1] - gy
                     dy = target[0] - gx
-                    
+                    if  line_right == 0 and line_center == 0 and line_left == 0 :
+                        passed_intersection = True 
                     
                     if dx == -1:
-                        if  line_right == 1:
+                        if passed_intersection == True :
                             current_state  = 'Sharpleft'
                         
                         else:
@@ -178,14 +181,16 @@ while True:
                  
                             
                     elif dx == 1:
-                        if line_left == 1 :
+                        if passed_intersection == True :
                             current_state  = 'Sharpright'
                             
                         else :
                             current_state  = 'forward'
                         state_updated = True
                         print('from map turn right')
-
+            if loop_count > 10 :
+                loop_count = 0
+                passed_intersection = False 
                         
             # --- STATE MACHINE ---
 
@@ -247,6 +252,7 @@ while True:
         client, _ = server.accept()
         print('Client reconnected.')
         current_path_index = 0
+
 
 
 
