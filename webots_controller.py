@@ -35,7 +35,7 @@ phi = 1.5  # [rad]
 
 
 # PID constants
-Kp = 1.3
+Kp = 1.2
 Ki = 0.0
 Kd = 0.25
 
@@ -214,9 +214,9 @@ while robot.step(timestep) != -1:
         # Perform active sharp turn
         if active_sharp_turn == 'Sharpleft':
             left_speed = -0.2 * MAX_SPEED
-            right_speed = 0.4 * MAX_SPEED
+            right_speed = 0.2 * MAX_SPEED
         elif active_sharp_turn == 'Sharpright':
-            left_speed = 0.4 * MAX_SPEED
+            left_speed = 0.2 * MAX_SPEED
             right_speed = -0.2 * MAX_SPEED
     
         if sharp_turn_counter >= SHARP_TURN_DURATION:
@@ -232,9 +232,9 @@ while robot.step(timestep) != -1:
     
         if active_sharp_turn == 'Sharpleft':
             left_speed = -0.2 * MAX_SPEED
-            right_speed = 0.4 * MAX_SPEED
+            right_speed = 0.2 * MAX_SPEED
         elif active_sharp_turn == 'Sharpright':
-            left_speed = 0.4 * MAX_SPEED
+            left_speed = 0.2 * MAX_SPEED
             right_speed = -0.2 * MAX_SPEED
      
     
