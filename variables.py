@@ -1,4 +1,51 @@
+# orientation of the robot from degrees 
+threshold = 30
+val = raw_phi
+print(raw_phi)
+# Determine direction
+if abs(val - 90) <= threshold:
+    direction = 'U'
+elif abs(val - 180) <= threshold:
+    direction = 'L'
+elif val <= 40 or val > 320 :
+    direction = 'R'
+elif abs(val - 270 ) <= threshold:
+    direction = 'D'
+else:
+    direction = None
+    
+delta = 'None'   
+if direction == 'U':
+    if (tx - gx) == -1:
+        #turn left
+        delta = 'Left'
+    if (tx - gx) == 1:
+        #turn right
+        delta = 'Right'
+        
+if direction == 'D':
+    if (tx - gx) == 1:
+        #turn left
+        delta = 'Left'
+    if (tx - gx) == -1:
+        #turn right
+        delta = 'Right'
+        
+if direction == 'L':
+    if (ty - gy) == -1:
+        #turn left
+        delta = 'Left'
+    if (ty - gy) == 1:
+        #turn right
+        delta = 'Right' 
 
+if direction == 'R':
+    if (ty - gy) == 1:
+        #turn left
+        delta = 'Left'
+    if (ty - gy) == -1:
+        #turn right
+        delta = 'Right' 
 
 
 points = {
