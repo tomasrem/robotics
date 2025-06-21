@@ -18,7 +18,7 @@ SHARP_TURN_DURATION =  5 # number of control loop steps
 sharp_turn_counter = 0
 sharp_turn_active = False
 active_sharp_turn = None
-sharp_turn_cooldown = 0
+
 SHARP_TURN_COOLDOWN = 15
 
 

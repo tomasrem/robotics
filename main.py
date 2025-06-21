@@ -1,62 +1,47 @@
 import heapq
-from time import sleep
 import socket
+import network
+import time
+from time import sleep
 
-# --- Wi-Fi / TCP setup (do not remove) ---
-addr = socket.getaddrinfo('0.0.0.0', 1234)[0][-1]
+# --- Wi-Fi static IP setup ---
+SSID       = 'Ziggo1541315'
+PASSWORD   = 'pchcestzy3gfnvdV'
+STATIC_IP  = '192.168.178.73'
+SUBNET     = '255.255.255.0'
+GATEWAY    = '192.168.178.1'
+DNS        = '8.8.8.8'
+
+def connect_wifi_static(ssid, password, ip, subnet, gateway, dns, timeout=15):
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    wlan.ifconfig((ip, subnet, gateway, dns))
+    print('Static IP configured:', wlan.ifconfig())
+    if not wlan.isconnected():
+        print('Connecting to Wi-Fi…')
+        wlan.connect(ssid, password)
+        start = time.time()
+        while not wlan.isconnected():
+            if time.time() - start > timeout:
+                raise RuntimeError('Wi-Fi connection timed out')
+            print('.', end='')
+            time.sleep(1)
+        print()
+    print('Connected, network config:', wlan.ifconfig())
+    return wlan
+
+connect_wifi_static(SSID, PASSWORD, STATIC_IP, SUBNET, GATEWAY, DNS)
+
+# --- TCP server ---
+addr   = socket.getaddrinfo('0.0.0.0', 1234)[0][-1]
 server = socket.socket()
 server.bind(addr)
 server.listen(1)
 print('Listening on', addr)
-
 client, _ = server.accept()
 print('Client connected!')
 
-# --- Tunable cell sizes (meters) and origin in grid coords ---
-cell_sizex  = 0.058823529
-cell_sizey  = 0.061538461
-origin_col  = 16
-origin_row  = 10
-
-def world_to_grid(x, y):
-    """
-    Convert real-world (x,y) → grid (col,row).
-    Uses (origin_col,origin_row) as the grid cell for real (0,0).
-    """
-    col_f = origin_col + (x / cell_sizex)
-    row_f = origin_row - (y / cell_sizey)
-    return int(round(col_f)), int(round(row_f))
-
-# --- Named waypoints: (grid-col,grid-row), (real-x,real-y) ---
-points = {
-    'A': ((10, 10), (-0.31, 0)),
-    'B': ((12, 10), (-0.205, 0)),
-    'C': ((14, 10), (-0.11, 0)),
-    'D': ((16, 10), (0, 0)),
-    'E': ((16, 6), (0, 0.24)),
-    'F': ((16, 4), (0, 0.35)),
-    'G': ((16, 2), (0, 0.5)),
-    'H': ((8, 2), (-0.5, 0.5)),
-    'I': ((8, 4), (-0.5, 0.35)),
-    'J': ((8, 6), (-0.5, 0.24)),
-    'K': ((8, 8), (-0.5, 0.145)),
-    'L': ((8, 10), (-0.5, 0)),
-    'M': ((0, 10), (-1, 0)),
-    'N': ((0, 8), (-1, 0.145)),
-    'O': ((0, 6), (-1, 0.24)),
-    'P': ((0, 2), (-1, 0.5)),
-    'R': ((2, 2), (-0.895, 0.5)),
-    'S': ((4, 2), (-0.795, 0.5)),
-    'T': ((6, 2), (-0.69, 0.5)),
-}
-
-# --- Reverse lookup: (col,row) → (label, real_x, real_y) ---
-grid_to_waypoint = {
-    points[label][0]: (label, points[label][1][0], points[label][1][1])
-    for label in points
-}
-
-# --- Occupancy grid (0=free, 1=wall) ---
+# --- Occupancy grid: 0=road, 1=wall ---
 grid = [
     [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1],
     [0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1],
@@ -72,83 +57,128 @@ grid = [
     [1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],
     [1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],
 ]
+ROWS = len(grid)
+COLS = len(grid[0])
 
-# --- Uniform move cost ---
-costs = [[1]*17 for _ in range(13)]
-# example of a higher cost cell:
+# --- Map scaling & origin ---
+cell_sizex  = 0.058823529
+cell_sizey  = 0.061538461
+origin_col  = 16
+origin_row  = 10
+
+_last_free = None
+
+def world_to_grid(x, y):
+    """
+    Convert (x,y)→(col,row). If result is a wall, search 3×3 neighbors
+    for nearest road. If none, fall back to last_free.
+    """
+    global _last_free
+    cf = origin_col + x / cell_sizex
+    rf = origin_row - y / cell_sizey
+    c = int(round(cf))
+    r = int(round(rf))
+    c = max(0, min(COLS-1, c))
+    r = max(0, min(ROWS-1, r))
+
+    if grid[r][c] == 1:
+        best = None
+        best_d2 = float('inf')
+        for dr in (-1,0,1):
+            for dc in (-1,0,1):
+                nr, nc = r+dr, c+dc
+                if 0 <= nr < ROWS and 0 <= nc < COLS and grid[nr][nc] == 0:
+                    d2 = (cf-nc)**2 + (rf-nr)**2
+                    if d2 < best_d2:
+                        best_d2 = d2
+                        best = (nc, nr)
+        if best:
+            c, r = best
+        elif _last_free:
+            return _last_free
+
+    _last_free = (c, r)
+    return (c, r)
+
+# --- Named waypoints ---
+points = {
+    'A': ((10, 10), (-0.31,   0)),
+    'B': ((12, 10), (-0.205,  0)),
+    'C': ((14, 10), (-0.11,   0)),
+    'D': ((16, 10), (0,       0)),
+    'E': ((16,  6), (0,       0.24)),
+    'F': ((16,  4), (0,       0.35)),
+    'G': ((16,  2), (0,       0.5)),
+    'H': (( 8,  2), (-0.5,    0.5)),
+    'I': (( 8,  4), (-0.5,    0.35)),
+    'J': (( 8,  6), (-0.5,    0.24)),
+    'K': (( 8,  8), (-0.5,    0.145)),
+    'L': (( 8, 10), (-0.5,    0)),
+    'M': (( 0, 10), (-1,      0)),
+    'N': (( 0,  8), (-1,      0.145)),
+    'O': (( 0,  6), (-1,      0.24)),
+    'P': (( 0,  2), (-1,      0.5)),
+    'R': (( 2,  2), (-0.895,  0.5)),
+    'S': (( 4,  2), (-0.795,  0.5)),
+    'T': (( 6,  2), (-0.69,   0.5)),
+}
+grid_to_waypoint = {
+    loc: (lbl, tx, ty)
+    for lbl, (loc, (tx, ty)) in points.items()
+}
+
+# --- Dijkstra pathfinding ---
+costs = [[1]*COLS for _ in range(ROWS)]
 costs[10][15] = 10
 
-# --- Dijkstra with tie-breaker for preferred direction ---
 def dijkstra(grid, costs, start, goal):
-    cols = len(grid[0])
-    rows = len(grid)
-    visited   = set()
-    distances = {start: 0}
-    parents   = {start: None}
-    frontier  = [(0, 0, start)]   # (dist, priority, node)
-
-    # Preferred move order: up, left, down, right
-    moves = [ (0, -1), (-1, 0), (0, 1), (1, 0) ]
-
+    visited = set()
+    dist    = {start:0}
+    parent  = {start:None}
+    frontier= [(0,0,start)]
+    moves   = [(0,-1),(-1,0),(0,1),(1,0)]
     while frontier:
-        current_distance, _, current = heapq.heappop(frontier)
-        if current in visited:
-            continue
-        visited.add(current)
-        if current == goal:
-            break
-
-        for order, (dx, dy) in enumerate(moves):
-            neigh = (current[0] + dx, current[1] + dy)
-            c, r = neigh
-            if not (0 <= c < cols and 0 <= r < rows):
-                continue
-            if grid[r][c] == 1:
-                continue
-
-            new_dist = current_distance + costs[r][c]
-            if new_dist < distances.get(neigh, float('inf')):
-                distances[neigh] = new_dist
-                parents[neigh]   = current
-                heapq.heappush(frontier, (new_dist, order, neigh))
-
-    # Reconstruct path
-    path, node = [], goal
-    while node is not None:
-        path.append(node)
-        node = parents.get(node)
+        d,_,node = heapq.heappop(frontier)
+        if node in visited: continue
+        visited.add(node)
+        if node == goal: break
+        for pri, (dx,dy) in enumerate(moves):
+            nb = (node[0]+dx, node[1]+dy)
+            x,y = nb
+            if not (0<=x<COLS and 0<=y<ROWS): continue
+            if grid[y][x]==1: continue
+            nd = d + costs[y][x]
+            if nd < dist.get(nb, float('inf')):
+                dist[nb], parent[nb] = nd, node
+                heapq.heappush(frontier, (nd, pri, nb))
+    path, cur = [], goal
+    while cur is not None:
+        path.append(cur)
+        cur = parent[cur]
     return list(reversed(path))
 
-def label_to_node(label):
-    return points[label][0]
-
-# --- Plan once ---
-start_label = 'D'
-goal_label  = 'P'
-start_node  = label_to_node(start_label)
-goal_node   = label_to_node(goal_label)
-
-full_path = dijkstra(grid, costs, start_node, goal_node)
-# drop the start node so we don't revisit it
-path = full_path[1:] if full_path and full_path[0] == start_node else full_path
-
-print("Planned path (col,row):")
-for step in path:
-    print(step)
+# --- Plan path once ---
+start_label, goal_label = 'D', 'P'
+start_node = points[start_label][0]
+goal_node  = points[goal_label][0]
+full_path  = dijkstra(grid, costs, start_node, goal_node)
+path       = full_path[1:] if full_path and full_path[0]==start_node else full_path
+print("Planned path:", path)
 
 # --- Loop state init ---
-buffer               = ""
-loop_count           = 0
-passed_intersection  = False
-in_intersection      = False
-current_state        = 'forward'
-counter              = 0
-COUNTER_MAX          = 5
-COUNTER_STOP         = 20
-calibrate_x_offset   = 0.0
-calibrate_y_offset   = 0.0
-calibrate_phi_offset = 0.0
-idx                  = 0
+buffer        = ""
+loop_count    = 0
+passed_int    = False
+in_int        = False
+state         = 'forward'
+counter       = 0
+MAX_TURNS     = 5
+STOP_PERIOD   = 20
+cal_x_off     = 0.0
+cal_y_off     = 0.0
+cal_phi_off   = 0.0
+idx           = 0
+last_gx, last_gy = start_node
 
 while True:
     loop_count += 1
@@ -156,127 +186,117 @@ while True:
 
     data = client.recv(64).decode()
     buffer += data
-
     while '\n' in buffer:
-        line, buffer = buffer.split('\n', 1)
+        line, buffer = buffer.split('\n',1)
         parts = line.split(',')
-        if len(parts) < 4:
+        if len(parts)<4:
             continue
 
         bits = parts[0].strip()
         try:
-            raw_x   = int(parts[1]) / 1000.0
-            raw_y   = int(parts[2]) / 1000.0
-            raw_phi = int(parts[3]) / 1000.0
+            raw_x   = int(parts[1])/1000.0
+            raw_y   = int(parts[2])/1000.0
+            raw_phi = int(parts[3])/1000.0
         except ValueError:
             print("Invalid data:", parts)
             continue
 
-        L = (bits[0] == '1')
-        C = (bits[1] == '1')
-        R = (bits[2] == '1')
+        L,C,R = bits[0]=='1', bits[1]=='1', bits[2]=='1'
 
-        # --- Calibrate on every intersection visit ---
+        # --- Intersection & waypoint calibration ---
         now_int = not (L or C or R)
-        if now_int and not in_intersection:
+        if now_int and not in_int:
             gx_raw, gy_raw = world_to_grid(raw_x, raw_y)
             key = (gx_raw, gy_raw)
             if key in grid_to_waypoint:
-                lbl, rx, ry = grid_to_waypoint[key]
-                calibrate_x_offset   = raw_x   - rx
-                calibrate_y_offset   = raw_y   - ry
-                calibrate_phi_offset = raw_phi
-                print(f"Calibrated at {lbl}: x_off={calibrate_x_offset:.3f}, "
-                      f"y_off={calibrate_y_offset:.3f}, φ_off={calibrate_phi_offset:.3f}")
-            in_intersection = True
-        if not now_int and in_intersection:
-            in_intersection = False
+                lbl, tx_true, ty_true = grid_to_waypoint[key]
+                cal_x_off   = raw_x   - tx_true
+                cal_y_off   = raw_y   - ty_true
+                cal_phi_off = raw_phi
+                # PRINT waypoint arrival, offsets, and true position
+                print(f"✓ Reached waypoint {lbl}")
+                print(f"  → offsets: x_off={cal_x_off:.3f}, y_off={cal_y_off:.3f}, φ_off={cal_phi_off:.3f}")
+                print(f"  → calibrated to true pos: ({tx_true:.3f},{ty_true:.3f})")
+            in_int = True
+        if not now_int and in_int:
+            in_int = False
 
-        # --- Apply calibration ---
-        x   = raw_x   - calibrate_x_offset
-        y   = raw_y   - calibrate_y_offset
-        phi = raw_phi - calibrate_phi_offset
+        # --- Apply calibration to pose ---
+        x   = raw_x   - cal_x_off
+        y   = raw_y   - cal_y_off
+        phi = raw_phi - cal_phi_off
 
-        # --- What cell are we in now? ---
-        gx, gy = world_to_grid(x, y)
+        # --- Raw grid cell from calibrated pose ---
+        gx_raw, gy_raw = world_to_grid(x, y)
 
-        # --- What cell are we heading to? ---
+        # --- Determine current target ---
         if idx < len(path):
             tx, ty = path[idx]
         else:
             tx, ty = goal_node
 
+        # --- AXIS LOCKING ---
+        if tx != last_gx:
+            gx, gy = gx_raw, last_gy
+        elif ty != last_gy:
+            gx, gy = last_gx, gy_raw
+        else:
+            gx, gy = gx_raw, gy_raw
+
+        last_gx, last_gy = gx, gy
+
         print(f"Grid: ({gx},{gy}) → target: ({tx},{ty})")
 
-        # --- Reached waypoint? ---
-        if gx == tx and gy == ty:
-            if (tx, ty) in grid_to_waypoint:
-                lbl, rx, ry = grid_to_waypoint[(tx, ty)]
-                print(f"✓ Reached waypoint {lbl}: true pos=({rx:.3f},{ry:.3f})")
-            else:
-                print(f"✓ Reached grid cell ({tx},{ty})")
+        # --- Advance on reaching target cell ---
+        if gx==tx and gy==ty:
+            if (gx,gy) not in grid_to_waypoint:
+                print(f"✓ Reached grid cell ({gx},{gy})")
             idx += 1
-            if idx >= len(path):
-                current_state = 'stop'
+            if idx>=len(path):
+                state = 'stop'
             state_updated = True
 
-        # --- Sharp‐turn & line follow FSM (unchanged) ---
+        # --- FSM: sharp-turn & line-follow ---
         delta = tx - gx
         if not (L or C or R):
-            passed_intersection = True
+            passed_int = True
 
         if delta == -1:
-            current_state = 'Sharpleft' if passed_intersection else 'forward'
-            state_updated = True
-        elif delta == 1:
-            current_state = 'Sharpright' if passed_intersection else 'forward'
-            state_updated = True
+            state, state_updated = ('Sharpleft' if passed_int else 'forward'), True
+        elif delta ==  1:
+            state, state_updated = ('Sharpright' if passed_int else 'forward'), True
 
-        if loop_count > 9:
-            loop_count = 0
-            passed_intersection = False
+        if loop_count>9:
+            loop_count, passed_int = 0, False
 
-        if current_state == 'forward':
+        if state=='forward':
             if R and not L:
-                current_state = 'turn_right'
-                counter = 0
-                state_updated = True
+                state, counter, state_updated = 'turn_right', 0, True
             elif L and not R:
-                current_state = 'turn_left'
-                counter = 0
-                state_updated = True
+                state, counter, state_updated = 'turn_left',  0, True
             elif L and C and R:
-                current_state = 'turn_left'
-                counter = 0
-                state_updated = True
+                state, counter, state_updated = 'turn_left',  0, True
 
-        elif current_state == 'turn_right':
+        elif state=='turn_right':
             counter += 1
-            if counter >= COUNTER_MAX:
-                current_state = 'forward'
-                counter = 0
-                state_updated = True
+            if counter>=MAX_TURNS:
+                state, counter, state_updated = 'forward', 0, True
 
-        elif current_state == 'turn_left':
+        elif state=='turn_left':
             counter += 1
-            if counter >= COUNTER_MAX:
-                current_state = 'forward'
-                counter = 0
-                state_updated = True
+            if counter>=MAX_TURNS:
+                state, counter, state_updated = 'forward', 0, True
 
-        elif current_state == 'stop':
-            # assume led_board is defined elsewhere
-            led_board.on()
+        elif state=='stop':
+            led_board.on()  # assume defined elsewhere
             counter += 1
-            if counter >= COUNTER_STOP:
-                current_state = 'forward'
-                counter = 0
+            if counter>=STOP_PERIOD:
+                state, counter, state_updated = 'forward', 0, True
                 led_board.off()
-                state_updated = True
 
         if state_updated:
-            client.send((current_state + '\n').encode())
-            print("Sent state:", current_state)
+            client.send((state+'\n').encode())
+            print("Sent state:", state)
 
     sleep(0.05)
 
