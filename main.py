@@ -178,8 +178,25 @@ cal_x_off     = 0.0
 cal_y_off     = 0.0
 cal_phi_off   = 0.0
 idx           = 0
-last_gx, last_gy = start_node
 
+delta = ''  
+
+last_gx, last_gy = start_node
+delay_after_turn = 2000  # 2 seconds
+turn_event_time = None
+delay_task_pending = False
+last_direction = ''  # to store the direction after delay
+prev_dir = 'R'
+prev_turn = 'Left'
+c_pos = ''
+
+def save_direction():
+    global last_direction, direction, prev_dir
+    last_direction = direction
+    prev_dir = direction   # Update the robot's known facing direction after the turn
+    print("Direction saved after delay as:", last_direction)
+    print("Updated prev_dir to:", prev_dir)
+    
 while True:
     loop_count += 1
     state_updated = False
@@ -206,6 +223,7 @@ while True:
         # --- Intersection & waypoint calibration ---
         now_int = not (L or C or R)
         if now_int and not in_int:
+            print('calibration starte')
             gx_raw, gy_raw = world_to_grid(raw_x, raw_y)
             key = (gx_raw, gy_raw)
             if key in grid_to_waypoint:
@@ -217,6 +235,8 @@ while True:
                 print(f"✓ Reached waypoint {lbl}")
                 print(f"  → offsets: x_off={cal_x_off:.3f}, y_off={cal_y_off:.3f}, φ_off={cal_phi_off:.3f}")
                 print(f"  → calibrated to true pos: ({tx_true:.3f},{ty_true:.3f})")
+            else:
+                print ('skipped calibration for some reason ')
             in_int = True
         if not now_int and in_int:
             in_int = False
@@ -225,7 +245,8 @@ while True:
         x   = raw_x   - cal_x_off
         y   = raw_y   - cal_y_off
         phi = raw_phi - cal_phi_off
-
+        print(raw_x,raw_y)
+        print(x,y)
         # --- Raw grid cell from calibrated pose ---
         gx_raw, gy_raw = world_to_grid(x, y)
 
@@ -241,7 +262,8 @@ while True:
         elif ty != last_gy:
             gx, gy = last_gx, gy_raw
         else:
-            gx, gy = gx_raw, gy_raw
+            #gx, gy = gx_raw, gy_raw
+            pass
 
         last_gx, last_gy = gx, gy
 
@@ -257,17 +279,111 @@ while True:
             state_updated = True
 
         # --- FSM: sharp-turn & line-follow ---
-        delta = tx - gx
-        if not (L or C or R):
-            passed_int = True
+        
+        # determining current direction of robot 
 
-        if delta == -1:
+        if prev_dir == 'U':
+            if prev_turn == 'Left':
+                c_pos = 'L'
+            elif prev_turn == 'Right':
+                c_pos = 'R'
+
+        elif prev_dir == 'L':
+            if prev_turn == 'Left':
+                c_pos = 'D'
+            elif prev_turn == 'Right':
+                c_pos = 'U'
+
+        elif prev_dir == 'R':
+            if prev_turn == 'Left':
+                c_pos = 'U'
+            elif prev_turn == 'Right':
+                c_pos = 'D'
+
+        elif prev_dir == 'D':
+            if prev_turn == 'Left':
+                c_pos = 'R'
+            elif prev_turn == 'Right':
+                c_pos = 'L'
+
+        direction = c_pos
+        current_direction = direction  # update current direction for later saving
+
+        # ---- Intersection detection ----
+        if not (L or C or R):
+            passed_int = True  # no line detected = passed intersection
+
+        # ---- Determine which way to turn based on direction and goal ----
+        delta = None
+
+        if direction == 'U':
+            if (tx - gx) <= -1:
+                delta = 'Left'
+            elif (tx - gx) >= 1:
+                delta = 'Right'
+                
+            if (tx - gx) == 0:
+                delta = 'None'
+        elif direction == 'D':
+            if (tx - gx) >= 1:
+                delta = 'Left'
+            elif (tx - gx) <= -1:
+                delta = 'Right'
+                 
+            if (tx - gx) == 0:
+                delta = 'None'    
+
+        elif direction == 'L':
+            if (ty - gy) <= -1:
+                delta = 'Right'
+            elif (ty - gy) >= 1:
+                delta = 'Left'
+                 
+            if (ty - gy) == 0:
+                delta = 'None'
+
+        elif direction == 'R':
+            if (ty - gy) >= 1:
+                delta = 'Right'
+            elif (ty - gy) <= -1:
+                delta = 'Left'
+                 
+            if (ty - gy) == 0:
+                delta = 'None'
+        print("Direction:", direction)
+        did_turn = False
+        if delta == 'Left':
             state, state_updated = ('Sharpleft' if passed_int else 'forward'), True
-        elif delta ==  1:
+            prev_turn = 'Left'
+            did_turn = True  # robot turned
+        elif delta == 'Right':
             state, state_updated = ('Sharpright' if passed_int else 'forward'), True
+            prev_turn = 'Right'
+            did_turn = True  # robot turned
+        elif delta == 'None':
+            # Robot went straight (no turn)
+            did_turn = False
+
+        # ---- Delayed saving of the direction after turning ----
+        if did_turn == True :
+            if passed_int and not delay_task_pending:
+                # First time after passing intersection
+                turn_event_time = time.ticks_ms()
+                delay_task_pending = True
+                passed_int = False  # reset, waiting for delay to finish
+                print("Intersection passed. Will save direction after delay...")
+
+            if delay_task_pending and time.ticks_diff(time.ticks_ms(), turn_event_time) >= delay_after_turn:
+                
+                save_direction()
+                print('Saved new direction')
+                delay_task_pending = False  # task completed
 
         if loop_count>9:
             loop_count, passed_int = 0, False
+            
+        # code to save the previous direction and only when the direction changes after delay get the new current direction by making the prev dir available
+            
 
         if state=='forward':
             if R and not L:
@@ -299,4 +415,3 @@ while True:
             print("Sent state:", state)
 
     sleep(0.05)
-
