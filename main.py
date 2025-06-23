@@ -5,11 +5,11 @@ import time
 from time import sleep
 
 # --- Wi-Fi static IP setup ---
-SSID       = 'Ziggo1541315'
-PASSWORD   = 'pchcestzy3gfnvdV'
-STATIC_IP  = '192.168.178.73'
-SUBNET     = '255.255.255.0'
-GATEWAY    = '192.168.178.1'
+SSID       = 'iPhonee'
+PASSWORD   = 'tomas666'
+STATIC_IP  = '172.20.10.5'
+SUBNET     = '255.255.255.240'
+GATEWAY    = '172.20.10.1'
 DNS        = '8.8.8.8'
 
 def connect_wifi_static(ssid, password, ip, subnet, gateway, dns, timeout=15):
