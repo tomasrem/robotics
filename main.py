@@ -5,11 +5,11 @@ import time
 from time import sleep
 
 # --- Wi-Fi static IP setup ---
-SSID       = 'iPhonee'
-PASSWORD   = 'tomas666'
-STATIC_IP  = '172.20.10.5'
-SUBNET     = '255.255.255.240'
-GATEWAY    = '172.20.10.1'
+SSID       = 'Ziggo1541315'
+PASSWORD   = 'pchcestzy3gfnvdV'
+STATIC_IP  = '192.168.178.73'
+SUBNET     = '255.255.255.0'
+GATEWAY    = '192.168.178.1'
 DNS        = '8.8.8.8'
 
 def connect_wifi_static(ssid, password, ip, subnet, gateway, dns, timeout=15):
@@ -57,6 +57,22 @@ grid = [
     [1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],
     [1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0],
 ]
+
+costs = [
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 10],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 10, 1],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    ]
 ROWS = len(grid)
 COLS = len(grid[0])
 
@@ -128,8 +144,7 @@ grid_to_waypoint = {
 }
 
 # --- Dijkstra pathfinding ---
-costs = [[1]*COLS for _ in range(ROWS)]
-costs[10][15] = 10
+
 
 def dijkstra(grid, costs, start, goal):
     visited = set()
@@ -158,7 +173,7 @@ def dijkstra(grid, costs, start, goal):
     return list(reversed(path))
 
 # --- Plan path once ---
-start_label, goal_label = 'D', 'P'
+start_label, goal_label = 'D', 'O'
 start_node = points[start_label][0]
 goal_node  = points[goal_label][0]
 full_path  = dijkstra(grid, costs, start_node, goal_node)
@@ -403,15 +418,11 @@ while True:
             if counter>=MAX_TURNS:
                 state, counter, state_updated = 'forward', 0, True
 
-        elif state=='stop':
-            led_board.on()  # assume defined elsewhere
-            counter += 1
-            if counter>=STOP_PERIOD:
-                state, counter, state_updated = 'forward', 0, True
-                led_board.off()
+      
 
         if state_updated:
             client.send((state+'\n').encode())
             print("Sent state:", state)
 
-    sleep(0.05)
+    sleep(0.04)
+
