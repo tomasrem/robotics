@@ -138,6 +138,21 @@ points = {
     'S': (( 4,  2), (-0.795,  0.5)),
     'T': (( 6,  2), (-0.69,   0.5)),
 }
+
+
+class FindMatchingPoint:
+    def __init__(self, points):
+        self.points = points
+
+    def __getitem__(self, gx_gy):
+        gx, gy = gx_gy
+        for label, ((pgx, pgy), (x, y)) in self.points.items():
+            if pgx == gx and pgy == gy:
+                return label, x, y
+        raise KeyError(f"No matching point for gx={gx}, gy={gy}")
+    
+findmatchingpoint = FindMatchingPoint(points)
+
 grid_to_waypoint = {
     loc: (lbl, tx, ty)
     for lbl, (loc, (tx, ty)) in points.items()
@@ -193,9 +208,9 @@ cal_x_off     = 0.0
 cal_y_off     = 0.0
 cal_phi_off   = 0.0
 idx           = 0
-
+calkey = ''
 delta = ''  
-
+calibration = False
 last_gx, last_gy = start_node
 delay_after_turn = 2000  # 2 seconds
 turn_event_time = None
@@ -204,6 +219,10 @@ last_direction = ''  # to store the direction after delay
 prev_dir = 'R'
 prev_turn = 'Left'
 c_pos = ''
+keyy = ''
+gx = ''
+gy = ''
+lbl = None
 
 def save_direction():
     global last_direction, direction, prev_dir
@@ -237,24 +256,46 @@ while True:
 
         # --- Intersection & waypoint calibration ---
         now_int = not (L or C or R)
-        if now_int and not in_int:
-            print('calibration starte')
-            gx_raw, gy_raw = world_to_grid(raw_x, raw_y)
-            key = (gx_raw, gy_raw)
-            if key in grid_to_waypoint:
-                lbl, tx_true, ty_true = grid_to_waypoint[key]
+        
+        gx_raw, gy_raw = world_to_grid(raw_x, raw_y)
+        keyy = (gx, gy)
+      
+    
+        #############
+
+        try:
+            lbl, tx_true, ty_true = findmatchingpoint[keyy]
+            print(f"**********            Matched: Label={lbl}, x={tx_true}, y={ty_true}             ***********")
+        except KeyError:
+            # No matching point found, handle accordingly
+            pass
+
+
+
+        #if the current position matches some waypoint and its not yet calibrated
+        if lbl != None  and calibration == False:
+            
+            calkey = keyy
+            calibration = True
+            
+        # still havent been calibrated ( its the first time )   
+        if calibration == True :
+            if now_int and not in_int:
                 cal_x_off   = raw_x   - tx_true
                 cal_y_off   = raw_y   - ty_true
                 cal_phi_off = raw_phi
                 # PRINT waypoint arrival, offsets, and true position
-                print(f"✓ Reached waypoint {lbl}")
+                print(f"Reached waypoint {lbl}")
                 print(f"  → offsets: x_off={cal_x_off:.3f}, y_off={cal_y_off:.3f}, φ_off={cal_phi_off:.3f}")
                 print(f"  → calibrated to true pos: ({tx_true:.3f},{ty_true:.3f})")
+                lbl, x, y = None, None, None
             else:
-                print ('skipped calibration for some reason ')
-            in_int = True
+                print ('waiting for intersection to calibrate ')
+                #in_int = True
+            
         if not now_int and in_int:
             in_int = False
+            calibration = False
 
         # --- Apply calibration to pose ---
         x   = raw_x   - cal_x_off
@@ -425,4 +466,5 @@ while True:
             print("Sent state:", state)
 
     sleep(0.04)
+
 

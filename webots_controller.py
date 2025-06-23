@@ -16,8 +16,8 @@ turning = False
 turn_start_angle = None
 turn_direction = None
 turn_start_time = 0
-COOLDOWN_PERIOD = 5
-ANGLE_THRESHOLD = 1.45
+COOLDOWN_PERIOD = 8
+ANGLE_THRESHOLD = 1.2
 
 MAX_SPEED = 6.28
 speed = 0.4 * MAX_SPEED
