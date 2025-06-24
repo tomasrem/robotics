@@ -332,7 +332,8 @@ while True:
             idx += 1
             if idx>=len(path):
                 state = 'stop'
-            state_updated = True
+                print('Reached the final point robot has stopped')
+                state_updated = True
 
         # --- FSM: sharp-turn & line-follow ---
         
