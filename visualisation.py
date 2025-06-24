@@ -40,7 +40,7 @@ def main():
     plt.figure(figsize=(7, 6))
     plt.imshow(img, extent=[0, max_x + 1, max_y + 1, 0])  # Keep image aligned
     plt.plot(x_vals, y_vals, marker='o', color='cyan', linewidth=2, markersize=6, label='Path')
-    plt.title("Overlayed Path on Map")
+    plt.title("Planned path")
     plt.xlim(0, max_x + 1)
     plt.ylim(max_y + 1, 0)
     plt.grid(False)
